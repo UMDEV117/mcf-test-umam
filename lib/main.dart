@@ -1,9 +1,11 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'components/surah_card.dart';
 
-void main() {
+void main() async {
+  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 
@@ -41,9 +43,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> fetchSurahList() async {
-    final url = Uri.parse('/api/v2/surat'); // Replace with actual API URL
+    final apiUrl = dotenv.env['API_URL'] ?? 'https://equran.id/api/v2/surat';
+
     try {
-      final response = await http.get(url);
+      final response = await http.get(Uri.parse(apiUrl));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         setState(() {
@@ -57,10 +60,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         isLoading = false;
       });
-      // Optionally handle error, e.g., show a snackbar
-      if (kDebugMode) {
-        print('Error fetching surah list: $error');
-      }
+      print('Error fetching surah list: $error');
     }
   }
 
@@ -71,104 +71,182 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('Quran Dashboard'),
         centerTitle: true,
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text(
-                    'Daftar Surat',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            height: 150,
+            color: Colors.green[100],
+            child: const Center(
+              child: Text(
+                'Selamat Datang di Quran Dashboard',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
                 ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: surahList.length,
-                    itemBuilder: (context, index) {
-                      final surah = surahList[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          title: Text(surah['namaLatin']),
-                          subtitle: Text(surah['arti']),
-                          leading: CircleAvatar(
-                            child: Text(surah['nomor'].toString()),
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    SurahDetailScreen(surah: surah),
-                              ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : Column(
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text(
+                          'Daftar Surat',
+                          style: TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: surahList.length,
+                          itemBuilder: (context, index) {
+                            final surah = surahList[index];
+                            return SurahCard(
+                              surah: surah,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => SurahDetailScreen(
+                                        surahId: surah['nomor']),
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
-                      );
-                    },
+                      ),
+                    ],
                   ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(16.0),
+            color: Colors.green[50],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.book, color: Colors.green),
+                      onPressed: () {
+                        // Handle action for "Baca Al-Qur'an"
+                      },
+                    ),
+                    const Text('Baca Al-Qur\'an',
+                        style: TextStyle(color: Colors.green))
+                  ],
                 ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class SurahDetailScreen extends StatelessWidget {
-  final Map<String, dynamic> surah;
+class SurahDetailScreen extends StatefulWidget {
+  final int surahId;
 
-  const SurahDetailScreen({super.key, required this.surah});
+  const SurahDetailScreen({super.key, required this.surahId});
+
+  @override
+  // ignore: library_private_types_in_public_api
+  _SurahDetailScreenState createState() => _SurahDetailScreenState();
+}
+
+class _SurahDetailScreenState extends State<SurahDetailScreen> {
+  Map<String, dynamic>? surahDetail;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchSurahDetail();
+  }
+
+  Future<void> fetchSurahDetail() async {
+    final apiUrl = 'https://equran.id/api/v2/surat/${widget.surahId}';
+
+    try {
+      final response = await http.get(Uri.parse(apiUrl));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          surahDetail = data['data'];
+          isLoading = false;
+        });
+      } else {
+        throw Exception('Failed to load detail');
+      }
+    } catch (error) {
+      setState(() {
+        isLoading = false;
+      });
+      print('Error fetching surah detail: $error');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(surah['namaLatin']),
+        title: Text(surahDetail?['namaLatin'] ?? 'Detail Surat'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Surat ${surah['namaLatin']} - ${surah['arti']}',
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Tempat Turun: ${surah['tempatTurun']}',
-                      style: const TextStyle(fontSize: 18),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Surat ${surahDetail?['namaLatin']} - ${surahDetail?['arti']}',
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tempat Turun: ${surahDetail?['tempatTurun']}',
+                            style: const TextStyle(fontSize: 18),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Jumlah Ayat: ${surahDetail?['jumlahAyat']}',
+                            style: const TextStyle(fontSize: 18),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Deskripsi:',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            surahDetail?['deskripsi'] ??
+                                'Deskripsi tidak tersedia.',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Jumlah Ayat: ${surah['jumlahAyat']}',
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Deskripsi:',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      surah['deskripsi'] ?? 'Deskripsi tidak tersedia.',
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 }
